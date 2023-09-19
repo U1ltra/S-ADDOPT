@@ -100,23 +100,30 @@ def D_SGD(
                 else:
                     temp = temp - learning_rate * grad
 
-                if (i + 1) % comm_round == 0:
-                    # averaging from neighbours
-                    # this probably caused significant performance drop
-                    if comm_type == "graph_avg":
-                        temp = np.matmul(weight, temp)
-                    elif comm_type == "all_avg":
-                        theta_avg = np.sum(temp, axis=0) / node_num
-                        temp = np.array([theta_avg for i in range(node_num)])
-                        raise NotImplementedError
-                    elif comm_type == "no_comm":
-                        pass
-                    elif comm_type == "one_shot":
-                        if k == K - 1 and i == update_round - 1 and node == node_num - 1:
+
+                if comm_round > 0:
+                    if (i + 1) % comm_round == 0:
+                        # averaging from neighbours
+                        # this probably caused significant performance drop
+                        if comm_type == "graph_avg":
                             temp = np.matmul(weight, temp)
-                            print("One Shot Communication")
-                    else:
-                        raise NotImplementedError
+                        elif comm_type == "all_avg":
+                            theta_avg = np.sum(temp, axis=0) / node_num
+                            temp = np.array([theta_avg for i in range(node_num)])
+                            raise NotImplementedError
+                        elif comm_type == "no_comm":
+                            pass
+                        elif comm_type == "one_shot":
+                            if k == K - 1 and i == update_round - 1 and node == node_num - 1:
+                                temp = np.matmul(weight, temp)
+                                print("One Shot Communication")
+                        else:
+                            raise NotImplementedError
+                elif comm_round < 0:
+                    for i in range(-comm_round):
+                        temp = np.matmul(weight, temp)
+                else:
+                    raise ValueError
 
                 if stop_at_converge:
                     cost_path = error_lr_0.cost_gap_path(temp, gap_type="theta")
@@ -127,7 +134,7 @@ def D_SGD(
         ut.monitor("D_SGD", k, K, track_time)
         theta.append(cp.deepcopy(temp))
 
-        if (k + 1) % save_every == 0 or k + 1 == K:
+        if save_every != -1 and ((k + 1) % save_every == 0 or k + 1 == K):
             # save_state(theta, save_path, exp_name)
             avg_theta = np.sum(theta[-1], axis=0) / prd.n
             error_lr = error(prd, avg_theta, prd.F_val(avg_theta))
@@ -246,28 +253,38 @@ def D_RR(
                         temp = temp - learning_rate * grad
                     else:
                         temp = 2*temp - theta_prev - learning_rate * (grad - grad_prev)
+                    if np.any(np.isnan(temp)):
+                        print(f"epoch {k} | node {node} | round {round} | theta {temp}")
+                        print(f"nan at {k} round")
+                        raise ValueError
                     
                     theta_prev = cp.deepcopy(temp)
                     grad_prev = cp.deepcopy(grad)
                 else:
                     temp = temp - learning_rate * grad
 
-                if (round + 1) % comm_round == 0:
-                    # averaging from neighbours
-                    if comm_type == "graph_avg":
-                        temp = np.matmul(weight, temp)
-                    elif comm_type == "all_avg":
-                        theta_avg = np.sum(temp, axis=0) / node_num
-                        temp = np.array([theta_avg for i in range(node_num)])
-                        raise NotImplementedError
-                    elif comm_type == "no_comm":
-                        pass
-                    elif comm_type == "one_shot":
-                        if k == K - 1 and round == update_round - 1 and node == node_num - 1:
+                if comm_round > 0:
+                    if (round + 1) % comm_round == 0:
+                        # averaging from neighbours
+                        if comm_type == "graph_avg":
                             temp = np.matmul(weight, temp)
-                            print("One Shot Communication")
-                    else:
-                        raise NotImplementedError
+                        elif comm_type == "all_avg":
+                            theta_avg = np.sum(temp, axis=0) / node_num
+                            temp = np.array([theta_avg for i in range(node_num)])
+                            raise NotImplementedError
+                        elif comm_type == "no_comm":
+                            pass
+                        elif comm_type == "one_shot":
+                            if k == K - 1 and round == update_round - 1 and node == node_num - 1:
+                                temp = np.matmul(weight, temp)
+                                print("One Shot Communication")
+                        else:
+                            raise NotImplementedError
+                elif comm_round < 0:
+                    for i in range(-comm_round):
+                        temp = np.matmul(weight, temp)
+                else:
+                    raise ValueError
 
                 if stop_at_converge:
                     cost_path = error_lr_0.cost_gap_path(temp, gap_type="theta")
@@ -278,7 +295,7 @@ def D_RR(
         ut.monitor("D_RR", k, K, track_time)
         theta.append(cp.deepcopy(temp))
 
-        if (k + 1) % save_every == 0 or k + 1 == K:
+        if save_every != -1 and ((k + 1) % save_every == 0 or k + 1 == K):
             # save_state(theta, save_path, exp_name)
             avg_theta = np.sum(theta[-1], axis=0) / prd.n
             error_lr = error(prd, avg_theta, prd.F_val(avg_theta))

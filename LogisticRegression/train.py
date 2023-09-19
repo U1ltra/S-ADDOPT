@@ -37,8 +37,10 @@ from utilities import (
 from Algos import centralized_algo, decentralized_algo
 
 np.random.seed(0)
-trial_num = 5
+trial_num = 2
 info_log = dict()
+
+np.set_printoptions(threshold=np.inf)
 
 for trial_idx in range(trial_num):
 
@@ -51,7 +53,7 @@ for trial_idx in range(trial_num):
 
     # LR_L2: MNIST, LR_L4: CIFAR
     logis_model = LR_L4(
-        node_num, limited_labels=False, balanced=True, class1=0, class2=9, nonconvex=True, 
+        node_num, limited_labels=False, balanced=True, class1=0, class2=9, # nonconvex=True, 
     )  ## instantiate the problem class
     dim = logis_model.p  ## dimension of the model
     L = logis_model.L  ## L-smooth constant
@@ -66,35 +68,35 @@ for trial_idx in range(trial_num):
     )  # initialize the model parameter for central algorithms
     model_para_dis = np.array([cp.deepcopy(model_para_central) for i in range(node_num)])
 
-    graph = "exponential"  # "ring", "grid", "exponential", "geometric", "erdos_renyi", "fully_connected"
+    graph = "ring"  # "ring", "grid", "exponential", "geometric", "erdos_renyi", "fully_connected"
     # f"/afs/andrew.cmu.edu/usr7/jiaruil3/private/DRR/experiments/gen_graphs/geo/geo_7_node{node_num}.npy"
     # f"/afs/andrew.cmu.edu/usr7/jiaruil3/private/DRR/experiments/comm_matrix/comm_matrix_{node_num}.npy"  
     comm_load_path = None
     communication_matrix = init_comm_matrix(node_num, graph, comm_load_path)
     communication_rounds = [  # TODO: one shot communication/averaging
-        1
+        1, 5, 10, 25, 125, -2, -5
     ]  # list of number of communication rounds for decentralized algorithms experiments
     comm_type = "graph_avg"  # "graph_avg", "all_avg", "one_shot", "no_comm", 
 
-    C_algos = []  # "SGD", "CRR"
+    C_algos = ["SGD", "CRR"]  # "SGD", "CRR"
     D_algos = ["DSGD", "DRR"]  # "DSGD", "DRR"
 
     CEPOCH_base = [150 for i in range(5)]  # number of epochs for central algorithms. should have the same length as C_batch_size
     DEPOCH_base = [150 for i in range(5)]  # number of epochs for decentralized algorithms
 
     # [0.001]
-    C_lr = None  # list of learning rate for central algorithms experiments
-    D_lr = None  # list of learning rate for decentralized algorithms experiments
+    C_lr = [0.001]  # list of learning rate for central algorithms experiments
+    D_lr = [0.001]  # list of learning rate for decentralized algorithms experiments
 
     # only used for nonconvex case
     # [1 / 50, 1 / 250, 1 / 1000]
-    C_lr_list = [1 / 50, 1 / 250, 1 / 1000]  # list of learning rate for central algorithms experiments. should have the same length as C_batch_size
-    D_lr_list = [1 / 50, 1 / 250, 1 / 1000] # list of learning rate for decentralized algorithms experiments
+    C_lr_list = None  # list of learning rate for central algorithms experiments. should have the same length as C_batch_size
+    D_lr_list = None # list of learning rate for decentralized algorithms experiments
     # [80, 120]
-    C_lr_dec_epochs = [80, 120]
-    D_lr_dec_epochs = [80, 120]
+    C_lr_dec_epochs = None
+    D_lr_dec_epochs = None
 
-    bz_list = [10, 15, 20, 30]
+    bz_list = [10]
     C_batch_size = [bz*node_num for bz in bz_list]  # list of batch size for central algorithms experiments
     D_batch_size = [bz for bz in bz_list]  # list of batch size for decentralized algorithms experiments
 
@@ -110,7 +112,7 @@ for trial_idx in range(trial_num):
     D_stop_at_converge = False  # whether to stop the training when the model converges for decentralized algorithms
     save_theta_path = False  # whether to save the model parameter training path for central and decentralized algorithms
     grad_track = False  # whether to track the gradient norm for decentralized algorithms
-    exact_diff = True  # exact diffusion
+    exact_diff = False  # exact diffusion
     load_init_theta = (
         False  # whether to load the initial model parameter from pretrained model
     )
@@ -132,15 +134,15 @@ for trial_idx in range(trial_num):
         "-_r",
     ]
     dir_name = "multi_trials"
-    exp_name = "exp9_3_nonconvex_ED_exp"
+    exp_name = "exp11_1_convex_cr_ring"
     exp_log_path = f"/afs/andrew.cmu.edu/usr7/jiaruil3/private/DRR/experiments/{dir_name}/{exp_name}/trial{trial_idx+1}"  # path to save the experiment results
     ckp_load_path = "/afs/andrew.cmu.edu/usr7/jiaruil3/private/DRR/experiments/optimum"  # path to load the optimal model parameter
-    opt_name = "nonconvex2"  # "convex", "nonconvex2"
+    opt_name = "convex"  # "convex", "nonconvex2"
     # init_theta_path = "/afs/andrew.cmu.edu/usr7/jiaruil3/private/DRR/experiments/init_param/CRR_opt_theta_init.npy"  # path to load the initial model parameter
     init_theta_path = "/afs/andrew.cmu.edu/usr7/jiaruil3/private/DRR/experiments/nonconvex_opt/opt4_opt3_test_F_theta_convergence/exp1/central_SGD/SGD_opt_theta_epoch200_bz10000_lr1.000000.npy"  # path to load the initial model parameter
     plot_every = 1  # plot points
     mark_every = 10  # mark interval
-    save_every = int(CEPOCH_base[0] / 5) if CEPOCH_base[0] > 5 else 1  # save interval
+    save_every = -1 # int(CEPOCH_base[0] / 5) if CEPOCH_base[0] > 5 else 1  # save interval
     plot_first = -1  # plot the first 1000 epochs
 
     """
@@ -298,21 +300,20 @@ for trial_idx in range(trial_num):
     for item in ["F", "theta1", "theta2", "grad1", "grad2", "consensus"]:
         gap_names = gen_gap_names(exp_name_all, item)
         info_log[f"trial{trial_idx+1}"].append(gap_names)
-        # plot_figure_path(
-        #     exp_log_path,
-        #     gap_names,
-        #     line_formats,
-        #     legend_all,
-        #     f"{exp_log_path}/cost_gap_all_{exp_name}_{item}.pdf",
-        #     plot_every,
-        #     mark_every,
-        #     plot_first,
-        #     smooth=use_smoother,
-        # )
+        plot_figure_path(
+            exp_log_path,
+            gap_names,
+            line_formats,
+            legend_all,
+            f"{exp_log_path}/cost_gap_all_{exp_name}_{item}.pdf",
+            plot_every,
+            mark_every,
+            plot_first,
+            smooth=use_smoother,
+        )
     import pickle
     with open(f"{exp_log_path}/info_log.pkl", "wb") as f:
         pickle.dump(info_log, f)
-    raise NotImplementedError
 
     end = time.time()
     print(f"{'-'*50}")

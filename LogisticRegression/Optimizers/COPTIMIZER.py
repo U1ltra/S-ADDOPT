@@ -140,7 +140,7 @@ def SGD(
         theta.append(temp)
 
         ut.monitor("SGD", k, K, track_time)
-        if (k + 1) % save_every == 0:
+        if save_every != -1 and ((k + 1) % save_every == 0 or k + 1 == K):
             # save_state(theta, save_path, exp_name)
             error_lr = error(pr, theta[-1], pr.F_val(theta[-1]))
             plot_figure_data(
@@ -245,7 +245,7 @@ def C_RR(
         theta.append(temp)
 
         ut.monitor("C_RR", k, K, track_time)
-        if (k + 1) % save_every == 0:
+        if save_every != -1 and ((k + 1) % save_every == 0 or k + 1 == K):
             # save_state(theta, save_path, exp_name)
             error_lr = error(pr, theta[-1], pr.F_val(theta[-1]))
             plot_figure_data(
