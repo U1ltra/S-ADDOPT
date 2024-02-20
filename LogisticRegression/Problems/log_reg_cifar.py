@@ -116,15 +116,16 @@ class LR_L4( object ):
     
     def F_val(self, theta):           ##  objective function value at theta
         if self.balanced == True:
+            # (10000, 3073) (3073, ) -> (10000, ) | (3073, ) (3073, 10000) (10000, ) | (4, 3073) (3073, 10000) (4, 10000) | (4, 16, 3073) (3073, 10000) (4, 16, 10000)
             f_val = np.sum( np.log( np.exp( np.multiply(-self.Y_train,\
-                                                    np.matmul(self.X_train,theta)) ) + 1 ) )/self.N
+                                                    np.matmul(theta, self.X_train.T)) ) + 1 ), axis=-1)/self.N
             if self.nonconvex:
                 theta_power = np.power(theta, 2)
                 theta_nonconvex = theta_power / (1 + theta_power)
-                reg_val = (self.reg/2) * np.sum(theta_nonconvex)
+                reg_val = (self.reg/2) * np.sum(theta_nonconvex, axis=-1)
             else:
-                reg_val = (self.reg/2) * (LA.norm(theta) ** 2) 
-
+                reg_val = (self.reg/2) * (LA.norm(theta, axis=-1) ** 2) 
+            
             return f_val + reg_val
         
         if self.balanced == False:

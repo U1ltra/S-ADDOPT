@@ -11,6 +11,7 @@ from matplotlib.font_manager import FontProperties
 from analysis import error
 import os
 from graph import *
+import glob
 
 
 def monitor(name, current, total, start_time):
@@ -63,7 +64,7 @@ def plot_figure_path(
         print(f"plotting {exp_save_path}/{name}...", flush=True)
         line = np.load(f"{exp_save_path}/{name}")
         if "consensus" in name:
-            line = line[1:] # remove the first element, since it is zero
+            line = line[1:]  # remove the first element, since it is zero
         if smooth:
             line = smoother(line, window_len=5)
 
@@ -243,6 +244,9 @@ def convert_to_doubly_stochastic(matrix, max_iterations=100, tolerance=1e-6):
 
 
 def spectral_norm(comm_matrix):
+    if comm_matrix is None:
+        return 1
+
     # ones matrix
     ones = np.ones(comm_matrix.shape)
     matrix = comm_matrix - ones / comm_matrix.shape[0]
@@ -263,6 +267,9 @@ def spectral_norm(comm_matrix):
 
 
 def print_matrix(matrix, name):
+    if matrix is None:
+        print("Solo graph")
+        return
     print(f"{name} Matrix:")
     for row in matrix:
         for element in row:
@@ -488,6 +495,9 @@ def init_comm_matrix(node_num, graph, load_path=None):
     :param graph: type of graph (exponential, grid, geometric, fully_connected, erdos_renyi)
     :param load_path: path to load the communication matrix
     """
+    if graph == "solo":
+        return None
+
     if load_path is None:
         if graph == "exponential":
             undir_graph = Exponential_graph(
@@ -696,10 +706,11 @@ def plot_avg(avg_path, gap_type="theta", lr_list=[1 / 50, 1 / 250, 1 / 1000]):
     import glob
     import re
     from matplotlib.font_manager import FontProperties
+
     def custom_sort_key(f):
         order = {"SGD": 1, "CRR": 2, "DSGD": 3, "DRR": 4}
         prefix = re.match(r"\D+", f).group()  # Extract the non-numeric prefix
-        return (order.get(prefix, 5))
+        return order.get(prefix, 5)
 
     font = FontProperties()
     font.set_size(18)
@@ -781,7 +792,7 @@ def plot_avg(avg_path, gap_type="theta", lr_list=[1 / 50, 1 / 250, 1 / 1000]):
         for file in file_set:
             os.remove(file)
             print(f"removed {file}")
-        
+
         print("--------")
 
 
@@ -802,41 +813,59 @@ def remove_files():
     ]
     trial_num = 5
     algo_list = [
-        # "central_SGD", 
-        # "central_CRR", 
-        "DSGD", 
-        "DRR"
+        # "central_SGD",
+        # "central_CRR",
+        "DSGD",
+        "DRR",
     ]
 
     for exp_idx, exp_name in enumerate(exp_list):
         for trial_idx in range(trial_num):
             for algo_idx, algo in enumerate(algo_list):
-                dir_to_remove = f"{base_path}/{exp_name}/trial{trial_idx+1}/{algo}/training"
+                dir_to_remove = (
+                    f"{base_path}/{exp_name}/trial{trial_idx+1}/{algo}/training"
+                )
 
                 # print(dir_to_remove, " -> ", os.path.isdir(dir_to_remove))
                 if os.path.exists(dir_to_remove) and os.path.isdir(dir_to_remove):
                     shutil.rmtree(dir_to_remove)
-                    print(f"Directory {dir_to_remove} and its contents removed successfully.")
+                    print(
+                        f"Directory {dir_to_remove} and its contents removed successfully."
+                    )
                 else:
                     print(f"Directory {dir_to_remove} does not exist.")
 
+
 def plot_by_config(
-    node_num, epoch, bz, lr, lr_list, cr, gap_type, GT_path, base_path, save_path,
-    plot_every=1, mark_every=10, plot_first=-1, skip_algos=[], prev_legends=None,
+    node_num,
+    epoch,
+    bz,
+    lr,
+    lr_list,
+    cr,
+    gap_type,
+    GT_path,
+    base_path,
+    save_path,
+    plot_every=1,
+    mark_every=10,
+    plot_first=-1,
+    skip_algos=[],
+    prev_legends=None,
     format_offset=0,
+    clear_fig=False,
 ):
     # list trials in directory
-    import glob
     files = glob.glob(f"{base_path}/trial*")
     trial_num = len(files)
     algo_list = [
-        "central_SGD", 
-        "central_CRR", 
-        "DSGD", 
-        "DRR",
-        #"GTRR",
+        # ("central_SGD", "SGD"),
+        ("central_CRR", "CRR"),
+        # ("DSGD", "DSGD"),
+        ("DRR", "DRR"),
+        # ("GTRR", "GTRR"),
     ]
-    algo_abbrev = ["SGD", "CRR", "DSGD", "DRR", ] # "GTRR"
+    # algo_abbrev = ["SGD", "CRR", "DSGD", "DRR", ] # "GTRR"
     gap_type_dict = {
         "nonconvex": ["grad1", "grad2", "consensus"],
         "convex": ["theta1", "theta2", "consensus"],
@@ -858,15 +887,20 @@ def plot_by_config(
     legends = []
 
     print("plotting the figure...", flush=True)
-    # plt.clf()
+    if clear_fig:
+        plt.clf()
+
     font = FontProperties()
     font.set_size(18)
     font2 = FontProperties()
     font2.set_size(10)
-    plt.rc('text', usetex=True)
+    # plt.rc('text', usetex=True)
     plt.figure(3)
 
-    for algo_idx, algo in enumerate(algo_list):
+    for algo_idx, algo_pair in enumerate(algo_list):
+        algo = algo_pair[0]
+        algo_abbrev = algo_pair[1]
+
         if algo in skip_algos:
             continue
 
@@ -874,11 +908,15 @@ def plot_by_config(
         if algo in ["central_SGD", "central_CRR"]:
             legends.append(f"{algo[-3:]}")
             # legends.append(f"{algo} (bz={bz*node_num}, lr={lr_list})")
-            exp_name = f"{algo_abbrev[algo_idx]}_gap_epoch{epoch}_bz{bz*node_num}_lr{lr:.6f}_{gap_type}"
+            exp_name = (
+                f"{algo_abbrev}_gap_epoch{epoch}_bz{bz*node_num}_lr{lr:.6f}_{gap_type}"
+            )
         elif algo in ["DSGD", "DRR", "GTRR"]:
             legends.append(f"{algo} (cr={cr})")
             # legends.append(f"{algo} (bz={bz}, lr={lr_list}, cr={cr})")
-            exp_name = f"{algo_abbrev[algo_idx]}_gap_epoch{epoch}_bz{bz}_lr{lr:.6f}_ur{cr}_{gap_type}"
+            exp_name = (
+                f"{algo_abbrev}_gap_epoch{epoch}_bz{bz}_lr{lr:.6f}_ur{cr}_{gap_type}"
+            )
 
         for trial_idx in range(trial_num):
             load_path = f"{base_path}/trial{trial_idx+1}/{algo}/{exp_name}.npy"
@@ -895,10 +933,10 @@ def plot_by_config(
         if plot_first == -1:
             plot_first = len(avg_gap)
         plt.plot(
-            xaxis[:plot_first:plot_every], 
-            yaxis, 
-            # formats[algo_idx+format_offset], 
-            markevery=mark_every
+            xaxis[:plot_first:plot_every],
+            yaxis,
+            formats[algo_idx+format_offset],
+            markevery=mark_every,
         )
 
     if prev_legends is not None:
@@ -908,48 +946,183 @@ def plot_by_config(
 
     plt.legend(legends, prop=font2)
     plt.grid(True)
-    plt.yscale("log")
-    plt.yticks([1e-1, 1e-3, 1e-5, 1e-7, 1e-9, 1e-11])
+    # plt.yscale("log")
+    # plt.yticks([10, 0])
     plt.tick_params(labelsize="large", width=3)
     plt.title("CIFAR10", fontproperties=font)
     plt.xlabel("Epochs", fontproperties=font)
-    plt.ylabel(r'$\frac{1}{n} \Sigma_{i=1}^n ||x_{i,t}^0 - x^*||^2$', fontproperties=font)
+    plt.ylabel("Loss", fontproperties=font)
     plt.savefig(save_path, format="pdf", dpi=4000, bbox_inches="tight")
     print("figure plotted...")
 
     return legends
 
 
+def plot_loss_at_epoch(
+    at_epoch,
+    node_num,
+    epoch,
+    bz,
+    lr_list,
+    cr,
+    base_path,
+    save_path,
+    plot_every=1,
+    mark_every=10,
+    plot_first=-1,
+    clear_fig=True,
+):
+    base_path_origion = base_path
+    algo_list = [
+        ("central_CRR", "CRR"),
+        ("DRR", "DRR"),
+    ]
+
+    formats = [  # list of line formats for plotting
+        "-vb",
+        "-^m",
+        "-dy",
+        "-sr",
+        "-1k",
+        "-2g",
+        "-3r",
+        "-.kp",
+        "-+c",
+        "-xm",
+        "-|y",
+        "-_r",
+    ]
+    legends = []
+
+    print("plotting the figure...", flush=True)
+    if clear_fig:
+        plt.clf()
+
+    font = FontProperties()
+    font.set_size(18)
+    font2 = FontProperties()
+    font2.set_size(10)
+    plt.figure(3)
+
+    networks = [
+        ("solo", "solo"),
+        ("ring", "ring"),
+        ("exponential", "exp"),
+    ]
+
+    curve_to_plot = []
+    for i in range(len(networks) * len(algo_list)):
+        curve_to_plot.append([])
+
+    for net_idx, net_pair in enumerate(networks):
+        base_path = f"{base_path_origion}/{net_pair[1]}"
+        print(base_path)
+        files = glob.glob(f"{base_path}/trial*")
+        trial_num = len(files)
+
+        for algo_idx, algo_pair in enumerate(algo_list):
+            algo = algo_pair[0]
+            algo_abbrev = algo_pair[1]
+            if algo in ["central_SGD", "central_CRR"]:
+                legends.append(f"{net_pair[1]} {algo[-3:]}")
+            elif algo in ["DSGD", "DRR", "GTRR"]:
+                legends.append(f"{net_pair[1]} {algo} (cr={cr})")
+
+            for lr in lr_list:
+                gap_list = []
+                if algo in ["central_SGD", "central_CRR"]:
+                    exp_name = f"{algo_abbrev}_gap_epoch{epoch}_bz{bz*node_num}_lr{lr:.6f}_loss"
+                elif algo in ["DSGD", "DRR", "GTRR"]:
+                    exp_name = (
+                        f"{algo_abbrev}_gap_epoch{epoch}_bz{bz}_lr{lr:.6f}_ur{cr}_loss"
+                    )
+
+                for trial_idx in range(trial_num):
+                    load_path = f"{base_path}/trial{trial_idx+1}/{algo}/{exp_name}.npy"
+                    gap_list.append(np.load(load_path))
+
+                avg_gap = np.mean(gap_list, axis=0)
+                if algo == "DRR":
+                    avg_gap = np.mean(avg_gap, axis=-1)
+                print(f"{net_pair[1]} {algo_pair[1]} {lr} {avg_gap.shape} {net_idx} {algo_idx}")
+                curve_to_plot[net_idx*len(algo_list)+algo_idx].append(avg_gap[at_epoch])
+
+    curve_to_plot = np.array(curve_to_plot)
+    print(f"curve_to_plot shape {curve_to_plot.shape}")
+    print(curve_to_plot)
+
+    if plot_first == -1:
+        plot_first = len(curve_to_plot[0])
+
+    for curve_idx in range(curve_to_plot.shape[0]):
+        print(curve_idx)
+        plt.plot(
+            lr_list,
+            curve_to_plot[curve_idx],
+            formats[curve_idx],
+            markevery=mark_every,
+        )
+
+    plt.legend(legends, prop=font2)
+    plt.grid(True)
+    plt.xscale("log")
+    plt.xticks(lr_list)
+    plt.tick_params(labelsize="large", width=3)
+    plt.title("CIFAR10", fontproperties=font)
+    plt.xlabel("Epochs", fontproperties=font)
+    plt.ylabel("Loss", fontproperties=font)
+    plt.savefig(save_path, format="pdf", dpi=4000, bbox_inches="tight")
+    print("figure plotted...")
+
+    pass
+
+
 if __name__ == "__main__":
     gap_type_list = [
         # ("grad1", "grad1_pre_avg"),
         # ("grad2", "grad2_post_avg"),
-        ("theta1", "theta1_post_avg"),
+        # ("theta1", "theta1_post_avg"),
         # ("theta2", "theta2_pre_avg"),
         # ("consensus", "consensus"),
+        ("loss", "loss"),
     ]
 
     legends = None
     for gap_type, save_name in gap_type_list:
         for bz in [10]:
-            for cr in [1, -5,  5, 10]:
-                skip_algos = []
-                if cr != 1:
-                    skip_algos.extend(["central_SGD", "central_CRR", "DSGD"])
+            for cr in [1]:
+                for lr in [0.0001, 0.001, 0.001, 0.01, 0.1, 1]:
+                    skip_algos = []
+                    if cr != 1:
+                        skip_algos.extend(["central_SGD", "central_CRR", "DSGD"])
 
-                legends = plot_by_config(
-                    node_num=16,
-                    epoch=150,
-                    bz=bz,
-                    lr=0.001000,
-                    lr_list=0.001000,
-                    cr=cr,
-                    gap_type=gap_type,
-                    GT_path=None,
-                    base_path="/Users/ultrali/Documents/Grad/research/gauri/230817_all_res/cr_exps/exp11_3_convex_cr_exp",
-                    save_path=f"/Users/ultrali/Documents/Grad/research/gauri/230817_all_res/cr_exps/plots/{save_name}_bz{bz}_cr{cr}_exp.pdf",
-                    skip_algos=skip_algos,
-                    prev_legends=legends,
-                    format_offset=len(legends) if legends is not None else 0,
-                )
+                    legends = plot_by_config(
+                        node_num=16,
+                        epoch=30,
+                        bz=bz,
+                        lr=lr,
+                        lr_list=0.001000,
+                        cr=cr,
+                        gap_type=gap_type,
+                        GT_path=None,
+                        base_path="/afs/andrew.cmu.edu/usr7/jiaruil3/private/DRR/experiments/lr_speedup_charac/solo",
+                        save_path=f"/afs/andrew.cmu.edu/usr7/jiaruil3/private/DRR/experiments/lr_speedup_charac/solo/plots/{save_name}_bz{bz}_cr{cr}_lr{lr}_solo.pdf",
+                        skip_algos=skip_algos,
+                        prev_legends=legends,
+                        format_offset=len(legends) if legends is not None else 0,
+                        clear_fig=True,
+                    )
+                    legends = None
 
+    for at_epoch in range(0, 30, 5):
+        plot_loss_at_epoch(
+            at_epoch,
+            node_num=16,
+            epoch=30,
+            bz=10,
+            lr_list=[0.0001, 0.001, 0.001, 0.01, 0.1, 1],
+            cr=1,
+            base_path="/afs/andrew.cmu.edu/usr7/jiaruil3/private/DRR/experiments/lr_speedup_charac",
+            save_path=f"/afs/andrew.cmu.edu/usr7/jiaruil3/private/DRR/experiments/lr_speedup_charac/solo/plots/{save_name}_bz{bz}_cr{cr}_atEpoch{at_epoch}_solo.pdf",
+            clear_fig=True,
+        )

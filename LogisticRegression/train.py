@@ -37,7 +37,7 @@ from utilities import (
 from Algos import centralized_algo, decentralized_algo
 
 np.random.seed(0)
-trial_num = 2
+trial_num = 1
 info_log = dict()
 
 np.set_printoptions(threshold=np.inf)
@@ -45,7 +45,7 @@ np.set_printoptions(threshold=np.inf)
 for trial_idx in range(trial_num):
 
     """
-    Data processing for MNIST
+    Data processing
     """
     node_num = 16  ## number of nodes
     # node_num = int(input("Enter number of nodes: "))
@@ -53,7 +53,7 @@ for trial_idx in range(trial_num):
 
     # LR_L2: MNIST, LR_L4: CIFAR
     logis_model = LR_L4(
-        node_num, limited_labels=False, balanced=True, class1=0, class2=9, # nonconvex=True, 
+        node_num, limited_labels=False, balanced=True, class1=0, class2=9, #nonconvex=True, 
     )  ## instantiate the problem class
     dim = logis_model.p  ## dimension of the model
     L = logis_model.L  ## L-smooth constant
@@ -68,25 +68,29 @@ for trial_idx in range(trial_num):
     )  # initialize the model parameter for central algorithms
     model_para_dis = np.array([cp.deepcopy(model_para_central) for i in range(node_num)])
 
-    graph = "ring"  # "ring", "grid", "exponential", "geometric", "erdos_renyi", "fully_connected"
+    graph = "ring"  # "solo", "ring", "grid", "exponential", "geometric", "erdos_renyi", "fully_connected"
     # f"/afs/andrew.cmu.edu/usr7/jiaruil3/private/DRR/experiments/gen_graphs/geo/geo_7_node{node_num}.npy"
     # f"/afs/andrew.cmu.edu/usr7/jiaruil3/private/DRR/experiments/comm_matrix/comm_matrix_{node_num}.npy"  
     comm_load_path = None
     communication_matrix = init_comm_matrix(node_num, graph, comm_load_path)
+    scales = [1/32, 1/16, 1/8]
+    scales = [1/4, 1/2, 3/4, 1]
     communication_rounds = [  # TODO: one shot communication/averaging
-        1, 5, 10, 25, 125, -2, -5
+        # -1, -2, -5
+        -int(total_train_sample / 16 / 10 * i) for i in scales
     ]  # list of number of communication rounds for decentralized algorithms experiments
-    comm_type = "graph_avg"  # "graph_avg", "all_avg", "one_shot", "no_comm", 
+    comm_type = "no_comm" if communication_matrix is None else "graph_avg" # "graph_avg", "all_avg", "one_shot", "no_comm", 
+    
 
-    C_algos = ["SGD", "CRR"]  # "SGD", "CRR"
-    D_algos = ["DSGD", "DRR"]  # "DSGD", "DRR"
-
-    CEPOCH_base = [150 for i in range(5)]  # number of epochs for central algorithms. should have the same length as C_batch_size
-    DEPOCH_base = [150 for i in range(5)]  # number of epochs for decentralized algorithms
+    C_algos = []  # "SGD", "CRR"
+    D_algos = ["DRR"]  # "DSGD", "DRR"
 
     # [0.001]
     C_lr = [0.001]  # list of learning rate for central algorithms experiments
     D_lr = [0.001]  # list of learning rate for decentralized algorithms experiments
+
+    CEPOCH_base = [150 for i in range(len(C_lr))]  # number of epochs for central algorithms. should have the same length as C_batch_size
+    DEPOCH_base = [150 for i in range(len(D_lr))]  # number of epochs for decentralized algorithms
 
     # only used for nonconvex case
     # [1 / 50, 1 / 250, 1 / 1000]
@@ -111,13 +115,14 @@ for trial_idx in range(trial_num):
     C_stop_at_converge = False  # whether to stop the training when the model converges for central algorithms
     D_stop_at_converge = False  # whether to stop the training when the model converges for decentralized algorithms
     save_theta_path = False  # whether to save the model parameter training path for central and decentralized algorithms
-    grad_track = False  # whether to track the gradient norm for decentralized algorithms
+    grad_track = True  # whether to track the gradient norm for decentralized algorithms
     exact_diff = False  # exact diffusion
     load_init_theta = (
         False  # whether to load the initial model parameter from pretrained model
     )
     use_smoother = False  # whether to use the smoothing technique for nonconvex case
     gap_type = "grad2"  # "F", "theta1", "theta2", "grad1", "grad2", "consensus"
+    comm_every_epoch = True
 
     line_formats = [  # list of line formats for plotting
         "-vb",
@@ -133,8 +138,8 @@ for trial_idx in range(trial_num):
         "-|y",
         "-_r",
     ]
-    dir_name = "multi_trials"
-    exp_name = "exp11_1_convex_cr_ring"
+    dir_name = "GTRR_comm_each_epoch"
+    exp_name = "ring_comm_epoch"
     exp_log_path = f"/afs/andrew.cmu.edu/usr7/jiaruil3/private/DRR/experiments/{dir_name}/{exp_name}/trial{trial_idx+1}"  # path to save the experiment results
     ckp_load_path = "/afs/andrew.cmu.edu/usr7/jiaruil3/private/DRR/experiments/optimum"  # path to load the optimal model parameter
     opt_name = "convex"  # "convex", "nonconvex2"
@@ -142,8 +147,8 @@ for trial_idx in range(trial_num):
     init_theta_path = "/afs/andrew.cmu.edu/usr7/jiaruil3/private/DRR/experiments/nonconvex_opt/opt4_opt3_test_F_theta_convergence/exp1/central_SGD/SGD_opt_theta_epoch200_bz10000_lr1.000000.npy"  # path to load the initial model parameter
     plot_every = 1  # plot points
     mark_every = 10  # mark interval
-    save_every = -1 # int(CEPOCH_base[0] / 5) if CEPOCH_base[0] > 5 else 1  # save interval
-    plot_first = -1  # plot the first 1000 epochs
+    save_every = int(CEPOCH_base[0] / 5) if CEPOCH_base[0] > 5 else 1 # int(CEPOCH_base[0] / 5) if CEPOCH_base[0] > 5 else 1 | -1  # save interval
+    plot_first = -1  # plot the first 1000 epochs | -1
 
     """
     Optimum solution
@@ -186,6 +191,8 @@ for trial_idx in range(trial_num):
     print(f"avg local sample {avg_local_sample}")
     print(f"CEPOCH base = {CEPOCH_base}")
     print(f"DEPOCH base {DEPOCH_base}")
+    if comm_every_epoch:
+        print(f"Scales: {scales}")
     print(f"communication rounds = {communication_rounds}")
     print(f"communication type = {comm_type}")
     print_matrix(communication_matrix, "communication matrix")
@@ -219,6 +226,7 @@ for trial_idx in range(trial_num):
     print(f"mark every = {mark_every}")
     print(f"save every = {save_every}")
     print(f"plot first = {plot_first}")
+    print(f"comm every epoch = {comm_every_epoch}")
 
 
     print(f"{'-'*50}", flush=True)
@@ -290,6 +298,7 @@ for trial_idx in range(trial_num):
             algo,
             gap_type,
             use_smoother,
+            comm_every_epoch,
         )
         exp_name_all.extend(exp_names)
         legend_all.extend(legends)

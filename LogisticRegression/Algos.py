@@ -90,12 +90,8 @@ def centralized_algo(
         print(f"Running {algo} with epoch = {epoch}, batch size = {bz}, lr = {lr}")
         print(f"{'-'*50}")
 
-        if os.path.exists(
-            f"{exp_save_path}/{exp_names[-1]}"
-        ):
-            print(
-                f"Already exists {exp_save_path}/{exp_names[-1]}"
-            )
+        if os.path.exists(f"{exp_save_path}/{exp_names[-1]}"):
+            print(f"Already exists {exp_save_path}/{exp_names[-1]}")
             continue
         if train_load:
             model_para = load_optimal(
@@ -112,7 +108,9 @@ def centralized_algo(
                 C_lr_dec,
                 lr_staged,
                 train_log_path,
-                f"{algo}_bz{bz}_lr_staged_check" if lr_staged else f"{algo}_bz{bz}_lr{lr:.3f}_check",
+                f"{algo}_bz{bz}_lr_staged_check"
+                if lr_staged
+                else f"{algo}_bz{bz}_lr{lr:.3f}_check",
                 save_every,
                 error_lr,
                 stop_at_converge=stop_at_convergence,
@@ -130,7 +128,9 @@ def centralized_algo(
                 C_lr_dec,
                 lr_staged,
                 train_log_path,
-                f"{algo}_bz{bz}_lr_staged_check" if lr_staged else f"{algo}_bz{bz}_lr{lr:.3f}_check",
+                f"{algo}_bz{bz}_lr_staged_check"
+                if lr_staged
+                else f"{algo}_bz{bz}_lr{lr:.3f}_check",
                 save_every,
                 error_lr,
                 stop_at_converge=stop_at_convergence,
@@ -138,6 +138,12 @@ def centralized_algo(
                 lr_dec_epochs=C_lr_dec_epochs,
                 node_num=node_num,
             )
+
+        F_loss = logis_model.F_val(np.array(theta))
+        np.save(
+            f"{exp_save_path}/{algo}_gap_epoch{epoch}_bz{bz}_lr{lr:.6f}_loss.npy",
+            F_loss,
+        )
 
         np.save(
             f"{exp_save_path}/{algo}_opt_theta_epoch{epoch}_bz{bz}_lr{lr:.6f}.npy",
@@ -223,7 +229,9 @@ def centralized_algo(
             plot_first,
             use_smoother,
         )
-    if not os.path.exists(f"{exp_save_path}/convergence_{algo}_consensus_{exp_name}.pdf"):
+    if not os.path.exists(
+        f"{exp_save_path}/convergence_{algo}_consensus_{exp_name}.pdf"
+    ):
         plot_figure_path(
             exp_save_path,
             [
@@ -273,6 +281,7 @@ def decentralized_algo(
     algo,
     gap_type,
     use_smoother,
+    comm_every_epoch,
 ):
     exp_save_path = f"{exp_log_path}/{algo}"
     initDir(exp_save_path)
@@ -303,14 +312,18 @@ def decentralized_algo(
     exp_names = []
     legends = []
     for idx, (epoch, bz, lr, cr) in enumerate(params):
-        exp_names.append(f"{algo}_gap_epoch{epoch}_bz{bz}_lr{lr:.6f}_ur{cr}_{gap_type}.npy")
+        exp_names.append(
+            f"{algo}_gap_epoch{epoch}_bz{bz}_lr{lr:.6f}_ur{cr}_{gap_type}.npy"
+        )
         if lr_staged:
             legends.append(f"{algo}: bz = {bz}, ur = {cr}, lr = {D_lr_list}")
         else:
             legends.append(f"{algo}: bz = {bz}, ur = {cr}, lr = {lr}")
         model_para = model_para_cp
         print(f"\n{'-'*50}")
-        print(f"Running {algo} with epoch = {epoch}, batch size = {bz}, lr = {lr}, ur = {cr}")
+        print(
+            f"Running {algo} with epoch = {epoch}, batch size = {bz}, lr = {lr}, ur = {cr}"
+        )
         print(f"{'-'*50}")
 
         if os.path.exists(
@@ -367,14 +380,23 @@ def decentralized_algo(
                 lr_list=D_lr_list,
                 lr_dec_epochs=D_lr_dec_epochs,
                 exact_diff=exact_diff,
+                comm_every_epoch=comm_every_epoch,
             )
+
+        F_loss = logis_model.F_val(np.array(theta_D))
+        np.save(
+            f"{exp_save_path}/{algo}_gap_epoch{epoch}_bz{bz}_lr{lr:.6f}_ur{cr}_loss.npy",
+            F_loss,
+        )
 
         res_F_D = error_lr.cost_gap_path(theta_D, gap_type="theta")
         np.save(
             f"{exp_save_path}/{algo}_gap_epoch{epoch}_bz{bz}_lr{lr:.6f}_ur{cr}_theta1.npy",
             res_F_D,
         )
-        res_F_D = error_lr.cost_gap_path(np.sum(theta_D, axis=1) / logis_model.n, gap_type="theta")
+        res_F_D = error_lr.cost_gap_path(
+            np.sum(theta_D, axis=1) / logis_model.n, gap_type="theta"
+        )
         np.save(
             f"{exp_save_path}/{algo}_gap_epoch{epoch}_bz{bz}_lr{lr:.6f}_ur{cr}_theta2.npy",
             res_F_D,
@@ -394,16 +416,12 @@ def decentralized_algo(
             f"{exp_save_path}/{algo}_gap_epoch{epoch}_bz{bz}_lr{lr:.6f}_ur{cr}_grad1.npy",
             res_F_D_grad,
         )
-        res_F_D_grad = error_lr.cost_gap_path(
-            theta_D, gap_type="grad"
-        )
+        res_F_D_grad = error_lr.cost_gap_path(theta_D, gap_type="grad")
         np.save(
             f"{exp_save_path}/{algo}_gap_epoch{epoch}_bz{bz}_lr{lr:.6f}_ur{cr}_grad2.npy",
             res_F_D_grad,
         )
-        res_F_D_concensus = error_lr.cost_gap_path(
-            theta_D, gap_type="consensus"
-        )
+        res_F_D_concensus = error_lr.cost_gap_path(theta_D, gap_type="consensus")
         np.save(
             f"{exp_save_path}/{algo}_gap_epoch{epoch}_bz{bz}_lr{lr:.6f}_ur{cr}_consensus.npy",
             res_F_D_concensus,
@@ -490,7 +508,9 @@ def decentralized_algo(
             plot_first,
             use_smoother,
         )
-    if not os.path.exists(f"{exp_save_path}/convergence_{algo}_consensus_{exp_name}.pdf"):
+    if not os.path.exists(
+        f"{exp_save_path}/convergence_{algo}_consensus_{exp_name}.pdf"
+    ):
         plot_figure_path(
             exp_save_path,
             [
